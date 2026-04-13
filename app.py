@@ -7,7 +7,7 @@ import unicodedata
 
 st.set_page_config(page_title="Matching ULTRA PRO", layout="wide")
 
-st.title("🧠 Matching Inteligente + Calidad de Datos (FINAL PRO)")
+st.title("🧠 LA IA ES LO MEJOR (FINAL PRO)")
 
 # -------------------------
 # LIMPIEZA
