@@ -7,7 +7,7 @@ import unicodedata
 
 st.set_page_config(page_title="Matching ULTRA PRO", layout="wide")
 
-st.title("🧠 Matching + Calidad de Datos (ULTRA PRO)")
+st.title("🧠 Matching + Calidad de Datos (ULTRA PRO FINAL)")
 
 # -------------------------
 # LIMPIEZA TEXTO
@@ -31,7 +31,7 @@ def limpiar_texto(texto):
     return " ".join(palabras)
 
 # -------------------------
-# SCORE INTELIGENTE
+# SCORE
 # -------------------------
 
 def calcular_score(a, b):
@@ -47,46 +47,67 @@ def calcular_score(a, b):
     return min(100, score)
 
 # -------------------------
-# MATCHING (NO FORZADO)
+# MATCHING INTELIGENTE
 # -------------------------
 
 def matching_ultra(base1, base2):
     resultados = []
     usados = set()
 
-    # Match desde base1
+    # 🔥 1. MATCH EXACTO PRIMERO
     for item in base1:
-        mejor = None
-        mejor_score = 0
-
-        for candidato in base2:
-            if candidato in usados:
-                continue
-
-            score = calcular_score(item, candidato)
-
-            if score > mejor_score:
-                mejor_score = score
-                mejor = candidato
-
-        if mejor_score >= 85:
-            estado = "✅ MATCH"
-            usados.add(mejor)
-        elif mejor_score >= 65:
-            estado = "⚠️ REVISAR"
-            usados.add(mejor)
+        if item in base2 and item not in usados:
+            resultados.append({
+                "Base 1": item,
+                "Base 2": item,
+                "Score": 100,
+                "Estado": "✅ MATCH"
+            })
+            usados.add(item)
         else:
-            estado = "❌ NO MATCH"
+            resultados.append({
+                "Base 1": item,
+                "Base 2": None,
+                "Score": 0,
+                "Estado": "PENDIENTE"
+            })
+
+    # 🔥 2. MATCH FUZZY SOLO PARA LOS PENDIENTES
+    for row in resultados:
+        if row["Estado"] == "PENDIENTE":
+            item = row["Base 1"]
+
             mejor = None
+            mejor_score = 0
 
-        resultados.append({
-            "Base 1": item,
-            "Base 2": mejor,
-            "Score": round(mejor_score, 2),
-            "Estado": estado
-        })
+            for candidato in base2:
+                if candidato in usados:
+                    continue
 
-    # Agregar sobrantes de base2
+                score = calcular_score(item, candidato)
+
+                if score > mejor_score:
+                    mejor_score = score
+                    mejor = candidato
+
+            if mejor_score >= 85:
+                row["Estado"] = "✅ MATCH"
+                row["Base 2"] = mejor
+                row["Score"] = round(mejor_score, 2)
+                usados.add(mejor)
+
+            elif mejor_score >= 65:
+                row["Estado"] = "⚠️ REVISAR"
+                row["Base 2"] = mejor
+                row["Score"] = round(mejor_score, 2)
+                usados.add(mejor)
+
+            else:
+                row["Estado"] = "❌ NO MATCH"
+                row["Base 2"] = None
+                row["Score"] = round(mejor_score, 2)
+
+    # 🔥 3. SOBRANTES DE BASE 2
     for item in base2:
         if item not in usados:
             resultados.append({
@@ -99,7 +120,7 @@ def matching_ultra(base1, base2):
     return pd.DataFrame(resultados)
 
 # -------------------------
-# DUPLICADOS EXACTOS
+# DUPLICADOS
 # -------------------------
 
 def analizar_duplicados(serie, nombre):
@@ -116,7 +137,7 @@ def analizar_duplicados(serie, nombre):
     return df_dup, total_dup, pct
 
 # -------------------------
-# DUPLICADOS SIMILARES
+# SIMILARES
 # -------------------------
 
 def duplicados_similares(base, threshold=90):
@@ -221,7 +242,7 @@ if modo == "📄 Mismo archivo":
         st.download_button(
             "📥 Descargar Excel",
             output.getvalue(),
-            "reporte_ultra.xlsx"
+            "reporte_ultra_final.xlsx"
         )
 
 # =========================
