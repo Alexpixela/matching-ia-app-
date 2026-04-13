@@ -1,3 +1,9 @@
+if "OPENAI_API_KEY" not in st.secrets:
+    st.error("❌ NO hay API KEY en Streamlit Cloud")
+    st.stop()
+else:
+    st.success("✅ API KEY detectada")
+
 import streamlit as st
 import pandas as pd
 import numpy as np
