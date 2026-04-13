@@ -10,7 +10,7 @@ st.set_page_config(page_title="Matching ULTRA PRO", layout="wide")
 st.title("🧠 Matching + Calidad de Datos (ULTRA PRO)")
 
 # -------------------------
-# LIMPIEZA
+# LIMPIEZA TEXTO
 # -------------------------
 
 STOPWORDS = ["sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl"]
@@ -31,7 +31,7 @@ def limpiar_texto(texto):
     return " ".join(palabras)
 
 # -------------------------
-# SCORE
+# SCORE INTELIGENTE
 # -------------------------
 
 def calcular_score(a, b):
@@ -47,17 +47,22 @@ def calcular_score(a, b):
     return min(100, score)
 
 # -------------------------
-# MATCHING
+# MATCHING (NO FORZADO)
 # -------------------------
 
 def matching_ultra(base1, base2):
     resultados = []
+    usados = set()
 
+    # Match desde base1
     for item in base1:
         mejor = None
         mejor_score = 0
 
         for candidato in base2:
+            if candidato in usados:
+                continue
+
             score = calcular_score(item, candidato)
 
             if score > mejor_score:
@@ -66,23 +71,35 @@ def matching_ultra(base1, base2):
 
         if mejor_score >= 85:
             estado = "✅ MATCH"
+            usados.add(mejor)
         elif mejor_score >= 65:
             estado = "⚠️ REVISAR"
+            usados.add(mejor)
         else:
             estado = "❌ NO MATCH"
             mejor = None
 
         resultados.append({
             "Base 1": item,
-            "Match": mejor,
+            "Base 2": mejor,
             "Score": round(mejor_score, 2),
             "Estado": estado
         })
 
+    # Agregar sobrantes de base2
+    for item in base2:
+        if item not in usados:
+            resultados.append({
+                "Base 1": None,
+                "Base 2": item,
+                "Score": 0,
+                "Estado": "❌ SOBRANTE B"
+            })
+
     return pd.DataFrame(resultados)
 
 # -------------------------
-# DUPLICADOS
+# DUPLICADOS EXACTOS
 # -------------------------
 
 def analizar_duplicados(serie, nombre):
@@ -99,7 +116,7 @@ def analizar_duplicados(serie, nombre):
     return df_dup, total_dup, pct
 
 # -------------------------
-# SIMILARES
+# DUPLICADOS SIMILARES
 # -------------------------
 
 def duplicados_similares(base, threshold=90):
@@ -123,7 +140,7 @@ def duplicados_similares(base, threshold=90):
 modo = st.radio("Modo", ["📄 Mismo archivo", "📂 Multi archivo"])
 
 # =========================
-# 📄 MISMO ARCHIVO
+# MISMO ARCHIVO
 # =========================
 
 if modo == "📄 Mismo archivo":
@@ -132,7 +149,7 @@ if modo == "📄 Mismo archivo":
 
     if archivo:
         excel = pd.ExcelFile(archivo)
-        hoja = st.selectbox("Hoja", excel.sheet_names)
+        hoja = st.selectbox("Selecciona hoja", excel.sheet_names)
 
         df = pd.read_excel(excel, sheet_name=hoja)
 
@@ -184,14 +201,14 @@ if modo == "📄 Mismo archivo":
         df_res = matching_ultra(base1, base2)
 
         filtro = st.multiselect(
-            "Filtrar",
-            ["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH"],
-            default=["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH"]
+            "Filtrar resultados",
+            ["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH", "❌ SOBRANTE B"],
+            default=["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH", "❌ SOBRANTE B"]
         )
 
         df_res = df_res[df_res["Estado"].isin(filtro)]
 
-        st.dataframe(df_res)
+        st.dataframe(df_res, use_container_width=True)
 
         # 📥 EXPORT
         output = BytesIO()
@@ -208,13 +225,13 @@ if modo == "📄 Mismo archivo":
         )
 
 # =========================
-# 📂 MULTI ARCHIVO
+# MULTI ARCHIVO
 # =========================
 
 if modo == "📂 Multi archivo":
 
     archivos = st.file_uploader(
-        "Sube archivos",
+        "Sube múltiples Excel",
         type=["xlsx"],
         accept_multiple_files=True
     )
@@ -229,12 +246,12 @@ if modo == "📂 Multi archivo":
 
         for archivo in archivos:
             excel = pd.ExcelFile(archivo)
-            hoja = st.selectbox(f"Hoja {archivo.name}", excel.sheet_names)
+            hoja = st.selectbox(f"Hoja - {archivo.name}", excel.sheet_names)
 
             df_temp = pd.read_excel(excel, sheet_name=hoja)
             cols = df_temp.select_dtypes(include="object").columns
 
-            col = st.selectbox(f"Columna {archivo.name}", cols)
+            col = st.selectbox(f"Columna - {archivo.name}", cols)
 
             hojas[archivo.name] = hoja
             columnas[archivo.name] = col
@@ -267,14 +284,14 @@ if modo == "📂 Multi archivo":
 
         df_final = pd.concat(resultados)
 
-        st.dataframe(df_final)
+        st.dataframe(df_final, use_container_width=True)
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_final.to_excel(writer, index=False)
 
         st.download_button(
-            "📥 Descargar",
+            "📥 Descargar Excel",
             output.getvalue(),
             "matching_multi_ultra.xlsx"
         )
