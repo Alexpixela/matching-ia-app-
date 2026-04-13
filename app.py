@@ -7,10 +7,10 @@ import unicodedata
 
 st.set_page_config(page_title="Matching ULTRA PRO", layout="wide")
 
-st.title("🧠 Matching + Calidad de Datos (ULTRA PRO FINAL)")
+st.title("🧠 Matching Inteligente + Calidad de Datos (FINAL PRO)")
 
 # -------------------------
-# LIMPIEZA TEXTO
+# LIMPIEZA
 # -------------------------
 
 STOPWORDS = ["sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl"]
@@ -47,72 +47,81 @@ def calcular_score(a, b):
     return min(100, score)
 
 # -------------------------
-# MATCHING INTELIGENTE
+# MATCHING GLOBAL (SOLUCIÓN REAL)
 # -------------------------
 
 def matching_ultra(base1, base2):
     resultados = []
-    usados = set()
+    usados_a = set()
+    usados_b = set()
 
-    # 🔥 1. MATCH EXACTO PRIMERO
-    for item in base1:
-        if item in base2 and item not in usados:
+    # 🔥 1. MATCH EXACTO
+    for a in base1:
+        if a in base2 and a not in usados_b:
             resultados.append({
-                "Base 1": item,
-                "Base 2": item,
+                "Base 1": a,
+                "Base 2": a,
                 "Score": 100,
                 "Estado": "✅ MATCH"
             })
-            usados.add(item)
+            usados_a.add(a)
+            usados_b.add(a)
+
+    # 🔥 2. TODOS LOS POSIBLES MATCHES
+    posibles = []
+
+    for a in base1:
+        if a in usados_a:
+            continue
+
+        for b in base2:
+            if b in usados_b:
+                continue
+
+            score = calcular_score(a, b)
+            posibles.append((a, b, score))
+
+    # 🔥 3. ORDENAR POR SCORE
+    posibles = sorted(posibles, key=lambda x: x[2], reverse=True)
+
+    # 🔥 4. ASIGNAR SIN CONFLICTOS
+    for a, b, score in posibles:
+        if a in usados_a or b in usados_b:
+            continue
+
+        if score >= 85:
+            estado = "✅ MATCH"
+        elif score >= 65:
+            estado = "⚠️ REVISAR"
         else:
+            continue
+
+        resultados.append({
+            "Base 1": a,
+            "Base 2": b,
+            "Score": round(score, 2),
+            "Estado": estado
+        })
+
+        usados_a.add(a)
+        usados_b.add(b)
+
+    # 🔥 5. NO MATCH BASE 1
+    for a in base1:
+        if a not in usados_a:
             resultados.append({
-                "Base 1": item,
+                "Base 1": a,
                 "Base 2": None,
                 "Score": 0,
-                "Estado": "PENDIENTE"
+                "Estado": "❌ NO MATCH"
             })
 
-    # 🔥 2. MATCH FUZZY SOLO PARA LOS PENDIENTES
-    for row in resultados:
-        if row["Estado"] == "PENDIENTE":
-            item = row["Base 1"]
-
-            mejor = None
-            mejor_score = 0
-
-            for candidato in base2:
-                if candidato in usados:
-                    continue
-
-                score = calcular_score(item, candidato)
-
-                if score > mejor_score:
-                    mejor_score = score
-                    mejor = candidato
-
-            if mejor_score >= 85:
-                row["Estado"] = "✅ MATCH"
-                row["Base 2"] = mejor
-                row["Score"] = round(mejor_score, 2)
-                usados.add(mejor)
-
-            elif mejor_score >= 65:
-                row["Estado"] = "⚠️ REVISAR"
-                row["Base 2"] = mejor
-                row["Score"] = round(mejor_score, 2)
-                usados.add(mejor)
-
-            else:
-                row["Estado"] = "❌ NO MATCH"
-                row["Base 2"] = None
-                row["Score"] = round(mejor_score, 2)
-
-    # 🔥 3. SOBRANTES DE BASE 2
-    for item in base2:
-        if item not in usados:
+    # 🔥 6. SOBRANTES BASE 2
+    for b in base2:
+        if b not in usados_b:
             resultados.append({
                 "Base 1": None,
-                "Base 2": item,
+                "Base 2": b,
                 "Score": 0,
                 "Estado": "❌ SOBRANTE B"
             })
@@ -182,36 +191,33 @@ if modo == "📄 Mismo archivo":
         base1 = df[col1].dropna().apply(limpiar_texto)
         base2 = df[col2].dropna().apply(limpiar_texto)
 
-        # 🔍 CALIDAD DE DATOS
+        # 🔍 CALIDAD
         st.subheader("🔍 Calidad de datos")
 
         dup1, total1, pct1 = analizar_duplicados(base1, col1)
         dup2, total2, pct2 = analizar_duplicados(base2, col2)
 
-        colA, colB = st.columns(2)
+        c1, c2 = st.columns(2)
 
-        with colA:
-            st.write(f"**{col1}**")
+        with c1:
             if total1 > 0:
-                st.error(f"🚨 {total1} duplicados ({pct1:.2f}%)")
+                st.error(f"{col1}: {total1} duplicados ({pct1:.2f}%)")
                 st.dataframe(dup1)
             else:
-                st.success("✅ Sin duplicados")
+                st.success(f"{col1}: sin duplicados")
 
-        with colB:
-            st.write(f"**{col2}**")
+        with c2:
             if total2 > 0:
-                st.error(f"🚨 {total2} duplicados ({pct2:.2f}%)")
+                st.error(f"{col2}: {total2} duplicados ({pct2:.2f}%)")
                 st.dataframe(dup2)
             else:
-                st.success("✅ Sin duplicados")
+                st.success(f"{col2}: sin duplicados")
 
         # ⚠️ SIMILARES
-        st.subheader("⚠️ Posibles errores de digitación")
+        st.subheader("⚠️ Posibles errores")
         similares = duplicados_similares(base1)
 
         if not similares.empty:
-            st.warning("Posibles duplicados similares")
             st.dataframe(similares)
         else:
             st.success("Sin errores similares")
@@ -222,7 +228,7 @@ if modo == "📄 Mismo archivo":
         df_res = matching_ultra(base1, base2)
 
         filtro = st.multiselect(
-            "Filtrar resultados",
+            "Filtrar",
             ["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH", "❌ SOBRANTE B"],
             default=["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH", "❌ SOBRANTE B"]
         )
@@ -239,11 +245,7 @@ if modo == "📄 Mismo archivo":
             dup2.to_excel(writer, sheet_name="Duplicados Col2", index=False)
             similares.to_excel(writer, sheet_name="Similares", index=False)
 
-        st.download_button(
-            "📥 Descargar Excel",
-            output.getvalue(),
-            "reporte_ultra_final.xlsx"
-        )
+        st.download_button("📥 Descargar Excel", output.getvalue(), "reporte_final.xlsx")
 
 # =========================
 # MULTI ARCHIVO
@@ -251,11 +253,7 @@ if modo == "📄 Mismo archivo":
 
 if modo == "📂 Multi archivo":
 
-    archivos = st.file_uploader(
-        "Sube múltiples Excel",
-        type=["xlsx"],
-        accept_multiple_files=True
-    )
+    archivos = st.file_uploader("Sube múltiples Excel", type=["xlsx"], accept_multiple_files=True)
 
     if archivos and len(archivos) >= 2:
 
@@ -278,11 +276,8 @@ if modo == "📂 Multi archivo":
             columnas[archivo.name] = col
 
         archivo_maestro = next(f for f in archivos if f.name == maestro)
-        df_master = pd.read_excel(
-            archivo_maestro,
-            sheet_name=hojas[maestro]
-        )
 
+        df_master = pd.read_excel(archivo_maestro, sheet_name=hojas[maestro])
         base1 = df_master[columnas[maestro]].dropna().apply(limpiar_texto)
 
         resultados = []
@@ -291,11 +286,7 @@ if modo == "📂 Multi archivo":
             if archivo.name == maestro:
                 continue
 
-            df = pd.read_excel(
-                archivo,
-                sheet_name=hojas[archivo.name]
-            )
-
+            df = pd.read_excel(archivo, sheet_name=hojas[archivo.name])
             base2 = df[columnas[archivo.name]].dropna().apply(limpiar_texto)
 
             df_res = matching_ultra(base1, base2)
@@ -311,8 +302,4 @@ if modo == "📂 Multi archivo":
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_final.to_excel(writer, index=False)
 
-        st.download_button(
-            "📥 Descargar Excel",
-            output.getvalue(),
-            "matching_multi_ultra.xlsx"
-        )
+        st.download_button("📥 Descargar Excel", output.getvalue(), "matching_multi.xlsx")
