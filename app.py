@@ -1,117 +1,115 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from openai import OpenAI
-
-# -------------------------
-# CONFIG INICIAL
-# -------------------------
-st.set_page_config(page_title="Matching IA", layout="wide")
-
-if "OPENAI_API_KEY" not in st.secrets:
-    st.error("❌ Falta API KEY en Streamlit Cloud")
-    st.stop()
-
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-from openai import OpenAI
+from rapidfuzz import fuzz, process
 from io import BytesIO
 import re
+import unicodedata
 
-st.set_page_config(page_title="Matching IA", layout="wide")
+st.set_page_config(page_title="Matching PRO", layout="wide")
 
-st.title("🤖 Matching Inteligente con IA")
-
-# -------------------------
-# CONFIG API
-# -------------------------
-if "OPENAI_API_KEY" not in st.secrets:
-    st.error("❌ Falta configurar OPENAI_API_KEY en Secrets")
-    st.stop()
-
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+st.title("🔍 Matching Inteligente PRO (Sin IA)")
 
 # -------------------------
-# FUNCIONES
+# 🧠 LIMPIEZA AVANZADA
 # -------------------------
+
+STOPWORDS = [
+    "sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl"
+]
 
 def limpiar_texto(texto):
-    texto = texto.lower().strip()
-    texto = re.sub(r'[^a-z0-9\s]', '', texto)
-    return texto
+    texto = str(texto).lower().strip()
 
-@st.cache_data
-def obtener_embeddings(textos):
-    response = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=textos
+    # quitar tildes
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
     )
-    return [np.array(e.embedding) for e in response.data]
 
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    # quitar caracteres especiales
+    texto = re.sub(r'[^a-z0-9\s]', '', texto)
 
-def emparejar_embeddings(base1, emb1, base2, emb2, threshold):
+    # quitar stopwords
+    palabras = texto.split()
+    palabras = [p for p in palabras if p not in STOPWORDS]
+
+    return " ".join(palabras)
+
+# -------------------------
+# 🔥 SCORING PRO
+# -------------------------
+
+def calcular_score(a, b):
+    score1 = fuzz.token_set_ratio(a, b)
+    score2 = fuzz.partial_ratio(a, b)
+    score3 = fuzz.token_sort_ratio(a, b)
+
+    # promedio base
+    score = (score1 * 0.4 + score2 * 0.3 + score3 * 0.3)
+
+    # bonus si uno contiene al otro
+    if a in b or b in a:
+        score += 10
+
+    # penalización por diferencia de longitud
+    len_diff = abs(len(a) - len(b))
+    if len_diff > 10:
+        score -= 5
+
+    return min(100, max(0, score))
+
+# -------------------------
+# 🔄 MATCHING PRO
+# -------------------------
+
+def emparejar_pro(base1, base2, threshold):
     resultados = []
     usados = set()
 
-    for i, vec1 in enumerate(emb1):
-        mejor_score = -1
-        mejor_j = None
+    for item in base1:
+        mejor_match = None
+        mejor_score = 0
 
-        for j, vec2 in enumerate(emb2):
-            if j in usados:
+        for candidato in base2:
+            if candidato in usados:
                 continue
 
-            score = cosine_similarity(vec1, vec2)
+            score = calcular_score(item, candidato)
 
             if score > mejor_score:
                 mejor_score = score
-                mejor_j = j
+                mejor_match = candidato
 
         if mejor_score >= threshold:
-            resultados.append((
-                base1[i],
-                base2[mejor_j],
-                round(float(mejor_score), 4),
-                "Coincidencia"
-            ))
-            usados.add(mejor_j)
+            resultados.append((item, mejor_match, round(mejor_score, 2), "Coincidencia"))
+            usados.add(mejor_match)
         else:
-            resultados.append((
-                base1[i],
-                None,
-                round(float(mejor_score), 4),
-                "Sin coincidencia"
-            ))
+            resultados.append((item, None, round(mejor_score, 2), "Sin coincidencia"))
 
     return pd.DataFrame(
         resultados,
-        columns=["Base 1", "Base 2", "Similitud", "Estado"]
+        columns=["Base 1", "Base 2", "Score", "Estado"]
     )
 
 # -------------------------
-# MODO DE USO
+# UI
 # -------------------------
 
 modo = st.radio(
-    "Selecciona modo",
-    ["📂 Entre archivos", "📄 Dentro del mismo archivo"]
+    "Modo",
+    ["📂 Entre archivos", "📄 Mismo archivo"]
 )
 
-threshold = st.slider("Umbral IA", 0.0, 1.0, 0.75)
+threshold = st.slider("Umbral", 0, 100, 80)
 
-# =========================
-# 🔹 MODO 1: MULTI ARCHIVO
-# =========================
+# -------------------------
+# 📂 MULTI ARCHIVO
+# -------------------------
 
 if modo == "📂 Entre archivos":
 
     archivos = st.file_uploader(
-        "Sube múltiples archivos Excel",
+        "Sube archivos",
         type=["xlsx"],
         accept_multiple_files=True
     )
@@ -119,95 +117,71 @@ if modo == "📂 Entre archivos":
     if archivos and len(archivos) >= 2:
 
         nombres = [f.name for f in archivos]
-        archivo_maestro_nombre = st.selectbox("Archivo maestro", nombres)
-        archivo_maestro = next(f for f in archivos if f.name == archivo_maestro_nombre)
+        maestro = st.selectbox("Archivo maestro", nombres)
 
-        excel_master = pd.ExcelFile(archivo_maestro)
-        hoja_master = st.selectbox("Hoja maestro", excel_master.sheet_names)
-        df_master = pd.read_excel(excel_master, sheet_name=hoja_master)
+        archivo_maestro = next(f for f in archivos if f.name == maestro)
 
+        df_master = pd.read_excel(archivo_maestro)
         col_master = st.selectbox("Columna maestro", df_master.columns)
 
-        base_master = df_master[col_master].dropna().astype(str).apply(limpiar_texto)
+        base1 = df_master[col_master].dropna().apply(limpiar_texto)
 
-        st.info("⏳ Generando embeddings...")
-        emb_master = obtener_embeddings(base_master.tolist())
-
-        resultados_globales = []
+        resultados = []
 
         for archivo in archivos:
-            if archivo.name == archivo_maestro_nombre:
+            if archivo.name == maestro:
                 continue
 
-            excel = pd.ExcelFile(archivo)
-            hoja = excel.sheet_names[0]
-            df = pd.read_excel(excel, sheet_name=hoja)
-
+            df = pd.read_excel(archivo)
             col = df.columns[0]
-            base = df[col].dropna().astype(str).apply(limpiar_texto)
 
-            emb = obtener_embeddings(base.tolist())
+            base2 = df[col].dropna().apply(limpiar_texto)
 
-            df_resultado = emparejar_embeddings(
-                base_master.tolist(),
-                emb_master,
-                base.tolist(),
-                emb,
-                threshold
-            )
+            df_res = emparejar_pro(base1, base2, threshold)
+            df_res["Archivo"] = archivo.name
 
-            df_resultado["Archivo"] = archivo.name
-            resultados_globales.append(df_resultado)
+            resultados.append(df_res)
 
-        df_final = pd.concat(resultados_globales, ignore_index=True)
+        df_final = pd.concat(resultados)
 
-        st.success("✅ Matching completado")
         st.dataframe(df_final)
 
-# =========================
-# 🔹 MODO 2: MISMO ARCHIVO
-# =========================
+        output = BytesIO()
+        df_final.to_excel(output, index=False)
 
-elif modo == "📄 Dentro del mismo archivo":
+        st.download_button(
+            "📥 Descargar",
+            output.getvalue(),
+            "matching_pro.xlsx"
+        )
 
-    archivo = st.file_uploader("Sube un archivo Excel", type=["xlsx"])
+# -------------------------
+# 📄 MISMO ARCHIVO
+# -------------------------
+
+if modo == "📄 Mismo archivo":
+
+    archivo = st.file_uploader("Sube Excel", type=["xlsx"])
 
     if archivo:
 
-        excel = pd.ExcelFile(archivo)
-        hoja = st.selectbox("Selecciona hoja", excel.sheet_names)
-
-        df = pd.read_excel(excel, sheet_name=hoja)
+        df = pd.read_excel(archivo)
 
         col1 = st.selectbox("Columna 1", df.columns)
         col2 = st.selectbox("Columna 2", df.columns)
 
-        base1 = df[col1].dropna().astype(str).apply(limpiar_texto)
-        base2 = df[col2].dropna().astype(str).apply(limpiar_texto)
+        base1 = df[col1].dropna().apply(limpiar_texto)
+        base2 = df[col2].dropna().apply(limpiar_texto)
 
-        st.info("⏳ Generando embeddings...")
+        df_res = emparejar_pro(base1, base2, threshold)
 
-        emb1 = obtener_embeddings(base1.tolist())
-        emb2 = obtener_embeddings(base2.tolist())
+        st.dataframe(df_res)
 
-        df_resultado = emparejar_embeddings(
-            base1.tolist(),
-            emb1,
-            base2.tolist(),
-            emb2,
-            threshold
-        )
-
-        st.success("✅ Matching completado")
-        st.dataframe(df_resultado)
-
-        # Descargar
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_resultado.to_excel(writer, index=False)
+        df_res.to_excel(output, index=False)
 
         st.download_button(
-            "📥 Descargar resultado",
+            "📥 Descargar",
             output.getvalue(),
-            "matching_mismo_archivo.xlsx"
+            "matching_pro.xlsx"
         )
