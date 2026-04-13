@@ -5,12 +5,12 @@ from io import BytesIO
 import re
 import unicodedata
 
-st.set_page_config(page_title="Matching ULTRA", layout="wide")
+st.set_page_config(page_title="Matching ULTRA PRO", layout="wide")
 
-st.title("🧠 Matching Inteligente ULTRA (Claro y preciso)")
+st.title("🧠 Matching + Calidad de Datos (ULTRA PRO)")
 
 # -------------------------
-# LIMPIEZA PRO
+# LIMPIEZA
 # -------------------------
 
 STOPWORDS = ["sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl"]
@@ -31,7 +31,7 @@ def limpiar_texto(texto):
     return " ".join(palabras)
 
 # -------------------------
-# SCORE INTELIGENTE
+# SCORE
 # -------------------------
 
 def calcular_score(a, b):
@@ -47,7 +47,7 @@ def calcular_score(a, b):
     return min(100, score)
 
 # -------------------------
-# MATCHING LIMPIO
+# MATCHING
 # -------------------------
 
 def matching_ultra(base1, base2):
@@ -64,14 +64,13 @@ def matching_ultra(base1, base2):
                 mejor_score = score
                 mejor = candidato
 
-        # CLASIFICACIÓN
         if mejor_score >= 85:
             estado = "✅ MATCH"
         elif mejor_score >= 65:
             estado = "⚠️ REVISAR"
         else:
             estado = "❌ NO MATCH"
-            mejor = None  # importante
+            mejor = None
 
         resultados.append({
             "Base 1": item,
@@ -83,10 +82,45 @@ def matching_ultra(base1, base2):
     return pd.DataFrame(resultados)
 
 # -------------------------
+# DUPLICADOS
+# -------------------------
+
+def analizar_duplicados(serie, nombre):
+    conteo = serie.value_counts()
+    duplicados = conteo[conteo > 1]
+
+    df_dup = duplicados.reset_index()
+    df_dup.columns = [nombre, "Cantidad"]
+
+    total = len(serie)
+    total_dup = duplicados.sum()
+    pct = (total_dup / total * 100) if total > 0 else 0
+
+    return df_dup, total_dup, pct
+
+# -------------------------
+# SIMILARES
+# -------------------------
+
+def duplicados_similares(base, threshold=90):
+    similares = []
+    lista = base.tolist()
+
+    for i in range(len(lista)):
+        for j in range(i + 1, len(lista)):
+            a, b = lista[i], lista[j]
+            score = fuzz.ratio(a, b)
+
+            if score >= threshold and a != b:
+                similares.append((a, b, score))
+
+    return pd.DataFrame(similares, columns=["Valor 1", "Valor 2", "Similitud"])
+
+# -------------------------
 # UI
 # -------------------------
 
-modo = st.radio("Modo", ["📂 Multi-archivo", "📄 Mismo archivo"])
+modo = st.radio("Modo", ["📄 Mismo archivo", "📂 Multi archivo"])
 
 # =========================
 # 📄 MISMO ARCHIVO
@@ -110,11 +144,47 @@ if modo == "📄 Mismo archivo":
         base1 = df[col1].dropna().apply(limpiar_texto)
         base2 = df[col2].dropna().apply(limpiar_texto)
 
+        # 🔍 CALIDAD DE DATOS
+        st.subheader("🔍 Calidad de datos")
+
+        dup1, total1, pct1 = analizar_duplicados(base1, col1)
+        dup2, total2, pct2 = analizar_duplicados(base2, col2)
+
+        colA, colB = st.columns(2)
+
+        with colA:
+            st.write(f"**{col1}**")
+            if total1 > 0:
+                st.error(f"🚨 {total1} duplicados ({pct1:.2f}%)")
+                st.dataframe(dup1)
+            else:
+                st.success("✅ Sin duplicados")
+
+        with colB:
+            st.write(f"**{col2}**")
+            if total2 > 0:
+                st.error(f"🚨 {total2} duplicados ({pct2:.2f}%)")
+                st.dataframe(dup2)
+            else:
+                st.success("✅ Sin duplicados")
+
+        # ⚠️ SIMILARES
+        st.subheader("⚠️ Posibles errores de digitación")
+        similares = duplicados_similares(base1)
+
+        if not similares.empty:
+            st.warning("Posibles duplicados similares")
+            st.dataframe(similares)
+        else:
+            st.success("Sin errores similares")
+
+        # 🔗 MATCHING
+        st.subheader("🔗 Matching")
+
         df_res = matching_ultra(base1, base2)
 
-        # FILTRO VISUAL 🔥
         filtro = st.multiselect(
-            "Filtrar por estado",
+            "Filtrar",
             ["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH"],
             default=["✅ MATCH", "⚠️ REVISAR", "❌ NO MATCH"]
         )
@@ -123,22 +193,25 @@ if modo == "📄 Mismo archivo":
 
         st.dataframe(df_res)
 
-        # EXPORT
+        # 📥 EXPORT
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_res.to_excel(writer, sheet_name="Resultados", index=False)
+            df_res.to_excel(writer, sheet_name="Matching", index=False)
+            dup1.to_excel(writer, sheet_name="Duplicados Col1", index=False)
+            dup2.to_excel(writer, sheet_name="Duplicados Col2", index=False)
+            similares.to_excel(writer, sheet_name="Similares", index=False)
 
         st.download_button(
-            "📥 Descargar",
+            "📥 Descargar Excel",
             output.getvalue(),
-            "matching_ultra.xlsx"
+            "reporte_ultra.xlsx"
         )
 
 # =========================
 # 📂 MULTI ARCHIVO
 # =========================
 
-if modo == "📂 Multi-archivo":
+if modo == "📂 Multi archivo":
 
     archivos = st.file_uploader(
         "Sube archivos",
@@ -203,5 +276,5 @@ if modo == "📂 Multi-archivo":
         st.download_button(
             "📥 Descargar",
             output.getvalue(),
-            "matching_ultra.xlsx"
+            "matching_multi_ultra.xlsx"
         )
