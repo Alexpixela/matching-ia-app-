@@ -26,51 +26,20 @@ html, body, [class*="css"] {
 }
 
 .stApp {
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    background: #f8fafc;
     min-height: 100vh;
 }
 
 h1 {
-    background: linear-gradient(90deg, #a78bfa, #60a5fa, #34d399);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #1e293b !important;
     font-size: 2.6rem !important;
     font-weight: 700 !important;
     letter-spacing: -1px;
 }
 
 h2, h3 {
-    color: #e2e8f0 !important;
+    color: #334155 !important;
     font-weight: 600 !important;
-}
-
-.metric-card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
-    padding: 1.2rem 1.5rem;
-    text-align: center;
-    backdrop-filter: blur(10px);
-    transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.metric-card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(167,139,250,0.5);
-}
-
-.metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-}
-
-.metric-label {
-    font-size: 0.8rem;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-top: 4px;
 }
 
 .score-badge {
@@ -83,17 +52,17 @@ h2, h3 {
     margin: 1rem 0;
 }
 
-.score-healthy { background: rgba(52,211,153,0.15); color: #34d399; border: 2px solid #34d399; }
-.score-warning { background: rgba(251,191,36,0.15); color: #fbbf24; border: 2px solid #fbbf24; }
-.score-critical { background: rgba(239,68,68,0.15); color: #ef4444; border: 2px solid #ef4444; }
+.score-healthy { background: #f0fdf4; color: #16a34a; border: 2px solid #16a34a; }
+.score-warning { background: #fffbeb; color: #d97706; border: 2px solid #d97706; }
+.score-critical { background: #fef2f2; color: #dc2626; border: 2px solid #dc2626; }
 
 .section-header {
-    background: rgba(255,255,255,0.03);
-    border-left: 4px solid #a78bfa;
+    background: #f1f5f9;
+    border-left: 4px solid #6366f1;
     padding: 0.6rem 1rem;
     border-radius: 0 8px 8px 0;
     margin: 1.5rem 0 1rem 0;
-    color: #e2e8f0;
+    color: #1e293b;
     font-size: 1.1rem;
     font-weight: 600;
 }
@@ -104,7 +73,7 @@ h2, h3 {
 }
 
 .stButton > button {
-    background: linear-gradient(135deg, #a78bfa, #60a5fa) !important;
+    background: linear-gradient(135deg, #6366f1, #3b82f6) !important;
     color: white !important;
     border: none !important;
     border-radius: 10px !important;
@@ -118,11 +87,11 @@ h2, h3 {
 }
 
 .warning-box {
-    background: rgba(251,191,36,0.1);
-    border: 1px solid rgba(251,191,36,0.4);
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
     border-radius: 10px;
     padding: 0.8rem 1.2rem;
-    color: #fbbf24;
+    color: #92400e;
     margin: 0.5rem 0;
     font-size: 0.9rem;
 }
@@ -138,7 +107,7 @@ div[data-testid="stMetricValue"] {
 # HEADER
 # -------------------------
 st.markdown("# 🧠 Matching PRO MAX")
-st.markdown("<p style='color:#94a3b8; margin-top:-10px; margin-bottom:2rem;'>Inteligencia de datos · Matching fuzzy · Calidad de bases</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#64748b; margin-top:-10px; margin-bottom:2rem;'>Inteligencia de datos · Matching fuzzy · Calidad de bases</p>", unsafe_allow_html=True)
 
 # -------------------------
 # LIMPIEZA
@@ -327,7 +296,7 @@ def grafico_kpi(kpi):
     fig.add_annotation(
         text=f"<b>{kpi['score']}</b><br><span style='font-size:12px'>/ 100</span>",
         x=0.5, y=0.5,
-        font=dict(size=28, color="white", family="JetBrains Mono"),
+        font=dict(size=28, color="#1e293b", family="JetBrains Mono"),
         showarrow=False,
         xref="paper", yref="paper"
     )
@@ -337,7 +306,7 @@ def grafico_kpi(kpi):
         plot_bgcolor="rgba(0,0,0,0)",
         showlegend=True,
         legend=dict(
-            font=dict(color="white", family="Space Grotesk"),
+            font=dict(color="#334155", family="Space Grotesk"),
             bgcolor="rgba(0,0,0,0)"
         ),
         margin=dict(t=20, b=20, l=20, r=20),
@@ -601,7 +570,7 @@ if modo == "📂 Multi archivo":
 # FOOTER
 # -------------------------
 st.markdown("""
-<div style='text-align:center; color:#475569; margin-top:4rem; font-size:0.8rem; padding-bottom:2rem;'>
+<div style='text-align:center; color:#94a3b8; margin-top:4rem; font-size:0.8rem; padding-bottom:2rem;'>
     Matching PRO MAX · Powered by RapidFuzz + Streamlit · v2.0
 </div>
 """, unsafe_allow_html=True)
