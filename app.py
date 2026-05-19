@@ -401,6 +401,213 @@ def render_similares(base, nombre):
     return similares
 
 # -------------------------
+# EXPORT PDF (estilo reporte auditoría)
+# -------------------------
+def exportar_pdf(col1, col2, archivo_nombre, df_res, kpi, total_base1, total_base2, total_dup1, total_dup2):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    )
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    from datetime import date
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=2.5*cm, rightMargin=2.5*cm,
+        topMargin=2.5*cm, bottomMargin=2.5*cm
+    )
+
+    # Colores corporativos
+    PINK    = colors.HexColor("#E91E8C")
+    PURPLE  = colors.HexColor("#7B2FBE")
+    GRAY    = colors.HexColor("#64748b")
+    LIGHT   = colors.HexColor("#f8fafc")
+    GREEN   = colors.HexColor("#16a34a")
+    YELLOW  = colors.HexColor("#d97706")
+    RED     = colors.HexColor("#dc2626")
+    WHITE   = colors.white
+    DARK    = colors.HexColor("#1e293b")
+
+    styles = getSampleStyleSheet()
+
+    def style(name, **kwargs):
+        return ParagraphStyle(name, **kwargs)
+
+    s_label  = style("label",  fontName="Helvetica-Bold", fontSize=9,  textColor=PINK,   leading=14)
+    s_value  = style("value",  fontName="Helvetica",      fontSize=9,  textColor=DARK,   leading=14)
+    s_title  = style("title",  fontName="Helvetica-Bold", fontSize=18, textColor=DARK,   leading=22)
+    s_sub    = style("sub",    fontName="Helvetica-Bold", fontSize=11, textColor=DARK,   leading=16)
+    s_body   = style("body",   fontName="Helvetica",      fontSize=9,  textColor=DARK,   leading=14)
+    s_bullet = style("bullet", fontName="Helvetica",      fontSize=9,  textColor=DARK,   leading=14, leftIndent=12)
+    s_center = style("center", fontName="Helvetica-Bold", fontSize=9,  textColor=WHITE,  leading=14, alignment=TA_CENTER)
+    s_head   = style("head",   fontName="Helvetica-Bold", fontSize=9,  textColor=WHITE,  leading=14, alignment=TA_CENTER)
+
+    story = []
+    hoy = date.today().strftime("%d de %B del %Y")
+
+    # --- ENCABEZADO ---
+    story.append(Paragraph("REPORTE DE AUDITORÍA DE DATOS", s_label))
+    story.append(Paragraph(f"Matching Inteligente — {archivo_nombre}", style("t2", fontName="Helvetica-Bold", fontSize=14, textColor=PINK, leading=18)))
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width="100%", thickness=2, color=PINK, spaceAfter=10))
+
+    # Metadata en tabla
+    meta = [
+        [Paragraph("Fecha de análisis:", s_label),  Paragraph(hoy, s_value),
+         Paragraph("Columna 1:", s_label),           Paragraph(col1, s_value)],
+        [Paragraph("Archivo analizado:", s_label),  Paragraph(archivo_nombre, s_value),
+         Paragraph("Columna 2:", s_label),           Paragraph(col2, s_value)],
+    ]
+    t_meta = Table(meta, colWidths=[3.8*cm, 5.5*cm, 3*cm, 5*cm])
+    t_meta.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    story.append(t_meta)
+    story.append(Spacer(1, 14))
+
+    # --- 1. OBJETIVO ---
+    story.append(Paragraph("1. Objetivo del análisis", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+    story.append(Paragraph(
+        f"Verificar la consistencia y correspondencia entre las columnas <b>{col1}</b> y <b>{col2}</b> "
+        f"del archivo <b>{archivo_nombre}</b>, mediante técnicas de matching fuzzy e inteligencia de datos, "
+        "con el propósito de confirmar que la base se encuentre correctamente conciliada.",
+        s_body
+    ))
+    story.append(Spacer(1, 12))
+
+    # --- 2. DATOS AUDITADOS ---
+    story.append(Paragraph("2. Detalles de los datos auditados", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+
+    det = [
+        [Paragraph("Plataforma / Columna", s_head), Paragraph("Total registros", s_head), Paragraph("Duplicados", s_head)],
+        [Paragraph(col1, s_body), Paragraph(str(total_base1), s_body), Paragraph(f"{total_dup1} ({round(total_dup1/total_base1*100,1) if total_base1>0 else 0}%)", s_body)],
+        [Paragraph(col2, s_body), Paragraph(str(total_base2), s_body), Paragraph(f"{total_dup2} ({round(total_dup2/total_base2*100,1) if total_base2>0 else 0}%)", s_body)],
+    ]
+    t_det = Table(det, colWidths=[6*cm, 5*cm, 5*cm])
+    t_det.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), PINK),
+        ("BACKGROUND", (0,1), (-1,1), LIGHT),
+        ("BACKGROUND", (0,2), (-1,2), WHITE),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [LIGHT, WHITE]),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+    ]))
+    story.append(t_det)
+    story.append(Spacer(1, 12))
+
+    # --- 3. RESULTADOS CUANTITATIVOS ---
+    story.append(Paragraph("3. Resultados cuantitativos", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+
+    match_n    = kpi["total_match"]
+    revisar_n  = kpi["total_revisar"]
+    nomatch_n  = kpi["total_no_match"]
+    sobrante_n = len(df_res[df_res["Estado"] == "❌ SOBRANTE B"])
+    pct_match  = kpi["match"]
+
+    res_data = [
+        [Paragraph("Estado", s_head), Paragraph("Cantidad", s_head), Paragraph("Porcentaje", s_head), Paragraph("Observación", s_head)],
+        [Paragraph("✅ MATCH",      s_body), Paragraph(str(match_n),   s_body), Paragraph(f"{pct_match}%",       s_body), Paragraph("Coincidencia confirmada", s_body)],
+        [Paragraph("⚠️ REVISAR",   s_body), Paragraph(str(revisar_n), s_body), Paragraph(f"{kpi['revisar']}%",  s_body), Paragraph("Coincidencia parcial — requiere revisión", s_body)],
+        [Paragraph("❌ NO MATCH",  s_body), Paragraph(str(nomatch_n), s_body), Paragraph(f"{kpi['no_match']}%", s_body), Paragraph("Sin par en columna 2", s_body)],
+        [Paragraph("❌ SOBRANTE B",s_body), Paragraph(str(sobrante_n),s_body), Paragraph("—",                  s_body), Paragraph("Registros en col 2 sin par en col 1", s_body)],
+    ]
+    t_res = Table(res_data, colWidths=[3.5*cm, 2.5*cm, 3*cm, 8.3*cm])
+    t_res.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), PINK),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [LIGHT, WHITE, LIGHT, WHITE]),
+        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+    ]))
+    story.append(t_res)
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f"Porcentaje de coincidencia total: <b>{pct_match}%</b>", style("pct", fontName="Helvetica-Bold", fontSize=10, textColor=DARK, leading=14)))
+    story.append(Spacer(1, 12))
+
+    # --- 4. SCORE DE CALIDAD ---
+    story.append(Paragraph("4. Score de calidad de la base", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+
+    score = kpi["score"]
+    if score >= 80:
+        score_color = GREEN
+        score_label = "Base saludable"
+    elif score >= 60:
+        score_color = YELLOW
+        score_label = "Base con problemas"
+    else:
+        score_color = RED
+        score_label = "Base crítica"
+
+    score_data = [[
+        Paragraph(f"{score} / 100", style("sc", fontName="Helvetica-Bold", fontSize=22, textColor=score_color, leading=26, alignment=TA_CENTER)),
+        Paragraph(score_label, style("sl", fontName="Helvetica-Bold", fontSize=11, textColor=score_color, leading=14)),
+    ]]
+    t_score = Table(score_data, colWidths=[5*cm, 12.3*cm])
+    t_score.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 10),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 10),
+        ("LEFTPADDING", (0,0), (-1,-1), 12),
+        ("BOX", (0,0), (-1,-1), 1.5, score_color),
+        ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#f0fdf4") if score >= 80 else (colors.HexColor("#fffbeb") if score >= 60 else colors.HexColor("#fef2f2"))),
+    ]))
+    story.append(t_score)
+    story.append(Spacer(1, 12))
+
+    # --- 5. RECOMENDACIONES ---
+    story.append(Paragraph("5. Recomendaciones", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+
+    recs = [
+        "Mantener el control periódico del cruce entre ambas columnas.",
+        "Revisar manualmente los registros marcados como ⚠️ REVISAR para confirmar o descartar coincidencias.",
+        "Depurar los registros duplicados detectados en cada columna.",
+        "Investigar los registros ❌ NO MATCH para determinar si corresponden a omisiones o errores de registro.",
+        "Continuar con revisiones periódicas para garantizar la consistencia e integridad de la base.",
+    ]
+    for r in recs:
+        story.append(Paragraph(f"• {r}", s_bullet))
+        story.append(Spacer(1, 3))
+    story.append(Spacer(1, 12))
+
+    # --- 6. CONCLUSIÓN ---
+    story.append(Paragraph("6. Conclusión", s_sub))
+    story.append(HRFlowable(width="100%", thickness=1, color=PINK, spaceAfter=6))
+    story.append(Paragraph(
+        f"El análisis realizado sobre el archivo <b>{archivo_nombre}</b> confirma que la base obtuvo un "
+        f"score de calidad de <b>{score}/100</b> ({score_label.lower()}). "
+        f"Se identificaron <b>{match_n} registros con match confirmado</b>, "
+        f"{revisar_n} que requieren revisión manual y {nomatch_n} sin correspondencia. "
+        "Las diferencias detectadas deben ser atendidas para garantizar la integridad operativa del libro de negocios.",
+        s_body
+    ))
+
+    story.append(Spacer(1, 20))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e2e8f0"), spaceAfter=6))
+    story.append(Paragraph(
+        f"Reporte generado automáticamente por Matching PRO MAX · {hoy}",
+        style("footer", fontName="Helvetica", fontSize=8, textColor=GRAY, alignment=TA_CENTER)
+    ))
+
+    doc.build(story)
+    return buf.getvalue()
+
+# -------------------------
 # EXPORT EXCEL
 # -------------------------
 def exportar_excel(df_res, dup1, dup2, similares1, similares2, kpi_dict):
@@ -490,12 +697,30 @@ if modo == "📄 Mismo archivo":
             # EXPORT
             st.markdown("---")
             excel_bytes = exportar_excel(df_res, dup1_df, dup2_df, similares1, similares2, kpi)
-            st.download_button(
-                "📥 Descargar Reporte Completo (.xlsx)",
-                excel_bytes,
-                "reporte_matching_pro.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+            pdf_bytes = exportar_pdf(
+                col1=col1, col2=col2,
+                archivo_nombre=archivo.name,
+                df_res=df_res, kpi=kpi,
+                total_base1=len(base1), total_base2=len(base2),
+                total_dup1=total_dup1, total_dup2=total_dup2
             )
+
+            dl1, dl2 = st.columns(2)
+            with dl1:
+                st.download_button(
+                    "📥 Descargar Reporte (.xlsx)",
+                    excel_bytes,
+                    "reporte_matching_pro.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            with dl2:
+                st.download_button(
+                    "📄 Descargar Reporte PDF",
+                    pdf_bytes,
+                    "reporte_matching_pro.pdf",
+                    mime="application/pdf"
+                )
 
 # =========================
 # MODO: MULTI ARCHIVO
