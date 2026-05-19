@@ -4,30 +4,160 @@ from rapidfuzz import fuzz
 from io import BytesIO
 import re
 import unicodedata
+import plotly.graph_objects as go
+import time
 
-st.set_page_config(page_title="Matching PRO MAX", layout="wide")
+st.set_page_config(
+    page_title="Matching PRO MAX",
+    layout="wide",
+    page_icon="🧠",
+    initial_sidebar_state="collapsed"
+)
 
-st.title("🧠 Matching Inteligente + Data Quality PRO")
+# -------------------------
+# CSS PERSONALIZADO
+# -------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.stApp {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    min-height: 100vh;
+}
+
+h1 {
+    background: linear-gradient(90deg, #a78bfa, #60a5fa, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2.6rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -1px;
+}
+
+h2, h3 {
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+}
+
+.metric-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 1.2rem 1.5rem;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(167,139,250,0.5);
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+
+.score-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 3.5rem;
+    font-weight: 700;
+    padding: 1rem 2.5rem;
+    border-radius: 20px;
+    margin: 1rem 0;
+}
+
+.score-healthy { background: rgba(52,211,153,0.15); color: #34d399; border: 2px solid #34d399; }
+.score-warning { background: rgba(251,191,36,0.15); color: #fbbf24; border: 2px solid #fbbf24; }
+.score-critical { background: rgba(239,68,68,0.15); color: #ef4444; border: 2px solid #ef4444; }
+
+.section-header {
+    background: rgba(255,255,255,0.03);
+    border-left: 4px solid #a78bfa;
+    padding: 0.6rem 1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1.5rem 0 1rem 0;
+    color: #e2e8f0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.stDataFrame {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+.stButton > button {
+    background: linear-gradient(135deg, #a78bfa, #60a5fa) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 2rem !important;
+    transition: opacity 0.2s ease !important;
+}
+
+.stButton > button:hover {
+    opacity: 0.85 !important;
+}
+
+.warning-box {
+    background: rgba(251,191,36,0.1);
+    border: 1px solid rgba(251,191,36,0.4);
+    border-radius: 10px;
+    padding: 0.8rem 1.2rem;
+    color: #fbbf24;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+}
+
+div[data-testid="stMetricValue"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 1.8rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------
+# HEADER
+# -------------------------
+st.markdown("# 🧠 Matching PRO MAX")
+st.markdown("<p style='color:#94a3b8; margin-top:-10px; margin-bottom:2rem;'>Inteligencia de datos · Matching fuzzy · Calidad de bases</p>", unsafe_allow_html=True)
 
 # -------------------------
 # LIMPIEZA
 # -------------------------
-STOPWORDS = ["sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl"]
+STOPWORDS = {"sa", "s.a", "ltda", "inc", "corp", "company", "co", "srl", "s.a.s", "sas", "de", "la", "el", "los", "las"}
 
+@st.cache_data(show_spinner=False)
 def limpiar_texto(texto):
     texto = str(texto).lower().strip()
-
     texto = ''.join(
         c for c in unicodedata.normalize('NFD', texto)
         if unicodedata.category(c) != 'Mn'
     )
-
     texto = re.sub(r'[^a-z0-9\s]', '', texto)
-
-    palabras = texto.split()
-    palabras = [p for p in palabras if p not in STOPWORDS]
-
+    palabras = [p for p in texto.split() if p not in STOPWORDS]
     return " ".join(palabras)
+
+def limpiar_serie(serie):
+    return serie.dropna().apply(limpiar_texto)
 
 # -------------------------
 # SCORE
@@ -38,145 +168,121 @@ def calcular_score(a, b):
         fuzz.partial_ratio(a, b) * 0.3 +
         fuzz.token_sort_ratio(a, b) * 0.2
     )
-
     if a in b or b in a:
         score += 10
-
     return min(100, score)
 
 # -------------------------
-# MATCHING GLOBAL REAL
+# MATCHING GLOBAL
 # -------------------------
-def matching_ultra(base1, base2):
-
-    base1 = list(base1)
-    base2 = list(base2)
+@st.cache_data(show_spinner=False)
+def matching_ultra(base1_tuple, base2_tuple):
+    base1 = list(base1_tuple)
+    base2 = list(base2_tuple)
 
     resultados = []
     usados_a = set()
     usados_b = set()
 
-    # 🔥 1. MATCH EXACTO
+    # 1. MATCH EXACTO
+    exactos_b = {b: j for j, b in enumerate(base2)}
     for i, a in enumerate(base1):
-        for j, b in enumerate(base2):
-            if i in usados_a or j in usados_b:
-                continue
-
-            if a == b:
-                resultados.append({
-                    "Base 1": a,
-                    "Base 2": b,
-                    "Score": 100,
-                    "Estado": "✅ MATCH"
-                })
+        if a in exactos_b:
+            j = exactos_b[a]
+            if j not in usados_b:
+                resultados.append({"Base 1": a, "Base 2": base2[j], "Score": 100, "Estado": "✅ MATCH"})
                 usados_a.add(i)
                 usados_b.add(j)
 
-    # 🔥 2. POSIBLES MATCHES
+    # 2. POSIBLES MATCHES (fuzzy)
     posibles = []
-
     for i, a in enumerate(base1):
         if i in usados_a:
             continue
-
         for j, b in enumerate(base2):
             if j in usados_b:
                 continue
-
             score = calcular_score(a, b)
-            posibles.append((i, j, score))
+            if score >= 65:
+                posibles.append((i, j, score))
 
-    # 🔥 3. ORDENAR
-    posibles = sorted(posibles, key=lambda x: x[2], reverse=True)
+    posibles.sort(key=lambda x: x[2], reverse=True)
 
-    # 🔥 4. ASIGNAR
     for i, j, score in posibles:
         if i in usados_a or j in usados_b:
             continue
-
-        if score >= 85:
-            estado = "✅ MATCH"
-        elif score >= 65:
-            estado = "⚠️ REVISAR"
-        else:
-            continue
-
+        estado = "✅ MATCH" if score >= 85 else "⚠️ REVISAR"
         resultados.append({
             "Base 1": base1[i],
             "Base 2": base2[j],
             "Score": round(score, 2),
             "Estado": estado
         })
-
         usados_a.add(i)
         usados_b.add(j)
 
-    # 🔥 5. NO MATCH BASE1
+    # 3. NO MATCH BASE 1
     for i, a in enumerate(base1):
         if i not in usados_a:
-            resultados.append({
-                "Base 1": a,
-                "Base 2": None,
-                "Score": 0,
-                "Estado": "❌ NO MATCH"
-            })
+            resultados.append({"Base 1": a, "Base 2": None, "Score": 0, "Estado": "❌ NO MATCH"})
 
-    # 🔥 6. SOBRANTES BASE2
+    # 4. SOBRANTES BASE 2
     for j, b in enumerate(base2):
         if j not in usados_b:
-            resultados.append({
-                "Base 1": None,
-                "Base 2": b,
-                "Score": 0,
-                "Estado": "❌ SOBRANTE B"
-            })
+            resultados.append({"Base 1": None, "Base 2": b, "Score": 0, "Estado": "❌ SOBRANTE B"})
 
     return pd.DataFrame(resultados)
 
 # -------------------------
 # DUPLICADOS
 # -------------------------
-def analizar_duplicados(serie, nombre):
+@st.cache_data(show_spinner=False)
+def analizar_duplicados(serie_tuple, nombre):
+    serie = pd.Series(serie_tuple)
     conteo = serie.value_counts()
     duplicados = conteo[conteo > 1]
-
     df_dup = duplicados.reset_index()
     df_dup.columns = [nombre, "Cantidad"]
-
     total = len(serie)
-    total_dup = duplicados.sum()
+    total_dup = int(duplicados.sum())
     pct = (total_dup / total * 100) if total > 0 else 0
-
-    return df_dup, total_dup, pct
+    return df_dup, total_dup, round(pct, 2)
 
 # -------------------------
-# SIMILARES
+# SIMILARES (con límite de seguridad)
 # -------------------------
-def duplicados_similares(base, threshold=90):
+MAX_SIMILARES = 500
+
+@st.cache_data(show_spinner=False)
+def duplicados_similares(base_tuple, threshold=90):
+    lista = list(base_tuple)
+    n = len(lista)
+
+    if n > MAX_SIMILARES:
+        return pd.DataFrame(), True  # demasiado grande
+
     similares = []
-    lista = base.tolist()
-
-    for i in range(len(lista)):
-        for j in range(i + 1, len(lista)):
+    for i in range(n):
+        for j in range(i + 1, n):
             score = fuzz.ratio(lista[i], lista[j])
             if score >= threshold and lista[i] != lista[j]:
                 similares.append((lista[i], lista[j], score))
 
-    return pd.DataFrame(similares, columns=["Valor 1", "Valor 2", "Similitud"])
+    return pd.DataFrame(similares, columns=["Valor 1", "Valor 2", "Similitud"]), False
 
 # -------------------------
 # KPI CALIDAD
 # -------------------------
-def calcular_calidad(df_match, total_base, total_dup):
-
+def calcular_calidad(df_match, total_base, total_dup1, total_dup2):
     match = len(df_match[df_match["Estado"] == "✅ MATCH"])
     revisar = len(df_match[df_match["Estado"] == "⚠️ REVISAR"])
     no_match = len(df_match[df_match["Estado"] == "❌ NO MATCH"])
 
-    pct_match = (match / total_base) * 100 if total_base > 0 else 0
-    pct_revisar = (revisar / total_base) * 100 if total_base > 0 else 0
-    pct_no_match = (no_match / total_base) * 100 if total_base > 0 else 0
-    pct_dup = (total_dup / total_base) * 100 if total_base > 0 else 0
+    pct_match = (match / total_base * 100) if total_base > 0 else 0
+    pct_revisar = (revisar / total_base * 100) if total_base > 0 else 0
+    pct_no_match = (no_match / total_base * 100) if total_base > 0 else 0
+    total_dup = total_dup1 + total_dup2
+    pct_dup = (total_dup / (total_base * 2) * 100) if total_base > 0 else 0
 
     score = (
         pct_match * 1.0 +
@@ -184,7 +290,6 @@ def calcular_calidad(df_match, total_base, total_dup):
         pct_no_match * 0.7 -
         pct_dup * 0.5
     )
-
     score = max(0, min(100, score))
 
     return {
@@ -192,157 +297,311 @@ def calcular_calidad(df_match, total_base, total_dup):
         "match": round(pct_match, 2),
         "revisar": round(pct_revisar, 2),
         "no_match": round(pct_no_match, 2),
-        "duplicados": round(pct_dup, 2)
+        "duplicados": round(pct_dup, 2),
+        "total_match": match,
+        "total_revisar": revisar,
+        "total_no_match": no_match,
     }
 
 # -------------------------
-# UI
+# GRÁFICO PLOTLY
 # -------------------------
-modo = st.radio("Modo", ["📄 Mismo archivo", "📂 Multi archivo"])
+def grafico_kpi(kpi):
+    labels = ["✅ Match", "⚠️ Revisar", "❌ No Match", "🚨 Duplicados"]
+    values = [kpi["match"], kpi["revisar"], kpi["no_match"], kpi["duplicados"]]
+    colors = ["#34d399", "#fbbf24", "#ef4444", "#f97316"]
+
+    fig = go.Figure()
+
+    # Donut
+    fig.add_trace(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.65,
+        marker=dict(colors=colors, line=dict(color='rgba(0,0,0,0)', width=0)),
+        textinfo="label+percent",
+        textfont=dict(family="Space Grotesk", size=13, color="white"),
+        hovertemplate="%{label}: %{value:.1f}%<extra></extra>",
+    ))
+
+    fig.add_annotation(
+        text=f"<b>{kpi['score']}</b><br><span style='font-size:12px'>/ 100</span>",
+        x=0.5, y=0.5,
+        font=dict(size=28, color="white", family="JetBrains Mono"),
+        showarrow=False,
+        xref="paper", yref="paper"
+    )
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=True,
+        legend=dict(
+            font=dict(color="white", family="Space Grotesk"),
+            bgcolor="rgba(0,0,0,0)"
+        ),
+        margin=dict(t=20, b=20, l=20, r=20),
+        height=320,
+    )
+
+    return fig
+
+# -------------------------
+# RENDER KPI SECTION
+# -------------------------
+def render_kpi(df_res, base1, base2, total_dup1, total_dup2):
+    kpi = calcular_calidad(df_res, len(base1), total_dup1, total_dup2)
+
+    st.markdown('<div class="section-header">📊 Score de Calidad de Base</div>', unsafe_allow_html=True)
+
+    col_graf, col_nums = st.columns([1, 1])
+
+    with col_graf:
+        fig = grafico_kpi(kpi)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_nums:
+        score_class = "score-healthy" if kpi["score"] >= 80 else ("score-warning" if kpi["score"] >= 60 else "score-critical")
+        label = "🟢 Base saludable" if kpi["score"] >= 80 else ("🟡 Base con problemas" if kpi["score"] >= 60 else "🔴 Base crítica")
+
+        st.markdown(f"""
+        <div style='margin-top:1.5rem'>
+            <div class='score-badge {score_class}'>{kpi['score']} / 100</div>
+            <p style='color:#94a3b8; margin-top:0.5rem; font-size:1rem'>{label}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        m1, m2 = st.columns(2)
+        m3, m4 = st.columns(2)
+
+        m1.metric("✅ Match", f"{kpi['match']}%", f"{kpi['total_match']} registros")
+        m2.metric("⚠️ Revisar", f"{kpi['revisar']}%", f"{kpi['total_revisar']} registros")
+        m3.metric("❌ No Match", f"{kpi['no_match']}%", f"{kpi['total_no_match']} registros")
+        m4.metric("🚨 Duplicados", f"{kpi['duplicados']}%")
+
+    return kpi
+
+# -------------------------
+# RENDER DUPLICADOS
+# -------------------------
+def render_duplicados(base1, base2, col1_name, col2_name):
+    st.markdown('<div class="section-header">🔍 Calidad de Datos — Duplicados</div>', unsafe_allow_html=True)
+
+    dup1, total1, pct1 = analizar_duplicados(tuple(base1), col1_name)
+    dup2, total2, pct2 = analizar_duplicados(tuple(base2), col2_name)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if total1 > 0:
+            st.error(f"**{col1_name}**: {total1} duplicados ({pct1}%)")
+            st.dataframe(dup1, use_container_width=True, hide_index=True)
+        else:
+            st.success(f"**{col1_name}**: sin duplicados ✓")
+
+    with c2:
+        if total2 > 0:
+            st.error(f"**{col2_name}**: {total2} duplicados ({pct2}%)")
+            st.dataframe(dup2, use_container_width=True, hide_index=True)
+        else:
+            st.success(f"**{col2_name}**: sin duplicados ✓")
+
+    return total1, total2
+
+# -------------------------
+# RENDER SIMILARES
+# -------------------------
+def render_similares(base, nombre):
+    st.markdown(f'<div class="section-header">⚠️ Posibles Errores Humanos — {nombre}</div>', unsafe_allow_html=True)
+
+    n = len(base)
+    if n > MAX_SIMILARES:
+        st.markdown(f"""
+        <div class="warning-box">
+            ⚡ <b>Análisis omitido:</b> {nombre} tiene {n} registros (límite: {MAX_SIMILARES}).
+            El análisis de similares en bases grandes puede tardar varios minutos.
+            Filtra o reduce la base para activarlo.
+        </div>
+        """, unsafe_allow_html=True)
+        return pd.DataFrame()
+
+    similares, _ = duplicados_similares(tuple(base))
+    if not similares.empty:
+        st.dataframe(similares.sort_values("Similitud", ascending=False), use_container_width=True, hide_index=True)
+    else:
+        st.success("Sin errores tipográficos similares detectados ✓")
+    return similares
+
+# -------------------------
+# EXPORT EXCEL
+# -------------------------
+def exportar_excel(df_res, dup1, dup2, similares1, similares2, kpi_dict):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_res.to_excel(writer, sheet_name="Matching", index=False)
+        if not dup1.empty:
+            dup1.to_excel(writer, sheet_name="Duplicados Col1", index=False)
+        if not dup2.empty:
+            dup2.to_excel(writer, sheet_name="Duplicados Col2", index=False)
+        if not similares1.empty:
+            similares1.to_excel(writer, sheet_name="Similares Col1", index=False)
+        if not similares2.empty:
+            similares2.to_excel(writer, sheet_name="Similares Col2", index=False)
+        pd.DataFrame([kpi_dict]).to_excel(writer, sheet_name="KPI", index=False)
+    return output.getvalue()
+
+# =========================================
+# UI PRINCIPAL
+# =========================================
+modo = st.radio(
+    "Selecciona modo de análisis",
+    ["📄 Mismo archivo", "📂 Multi archivo"],
+    horizontal=True
+)
+
+st.markdown("---")
 
 # =========================
-# MISMO ARCHIVO
+# MODO: MISMO ARCHIVO
 # =========================
 if modo == "📄 Mismo archivo":
 
-    archivo = st.file_uploader("Sube Excel", type=["xlsx"])
+    archivo = st.file_uploader("📎 Sube tu archivo Excel", type=["xlsx"])
 
     if archivo:
         excel = pd.ExcelFile(archivo)
-        hoja = st.selectbox("Selecciona hoja", excel.sheet_names)
-
+        hoja = st.selectbox("📋 Selecciona la hoja", excel.sheet_names)
         df = pd.read_excel(excel, sheet_name=hoja)
 
-        cols = df.select_dtypes(include="object").columns
+        cols_obj = df.select_dtypes(include="object").columns.tolist()
+        if len(cols_obj) < 2:
+            st.error("El archivo necesita al menos 2 columnas de texto.")
+            st.stop()
 
-        col1 = st.selectbox("Columna 1", cols)
-        col2 = st.selectbox("Columna 2", cols)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            col1 = st.selectbox("Columna 1 (Base maestra)", cols_obj, key="c1")
+        with col_b:
+            col2 = st.selectbox("Columna 2 (A comparar)", cols_obj, index=min(1, len(cols_obj)-1), key="c2")
 
-        base1 = df[col1].dropna().apply(limpiar_texto)
-        base2 = df[col2].dropna().apply(limpiar_texto)
+        if col1 == col2:
+            st.warning("⚠️ Selecciona dos columnas diferentes.")
+            st.stop()
 
-        # 🔍 DUPLICADOS
-        st.subheader("🔍 Calidad de datos")
+        if st.button("🚀 Ejecutar Análisis"):
+            with st.spinner("Limpiando y procesando datos..."):
+                base1 = limpiar_serie(df[col1])
+                base2 = limpiar_serie(df[col2])
 
-        dup1, total1, pct1 = analizar_duplicados(base1, col1)
-        dup2, total2, pct2 = analizar_duplicados(base2, col2)
+            # DUPLICADOS
+            total_dup1, total_dup2 = render_duplicados(base1, base2, col1, col2)
+            dup1_df, _, _ = analizar_duplicados(tuple(base1), col1)
+            dup2_df, _, _ = analizar_duplicados(tuple(base2), col2)
 
-        c1, c2 = st.columns(2)
+            # SIMILARES (ambas columnas)
+            similares1 = render_similares(base1, col1)
+            similares2 = render_similares(base2, col2)
 
-        with c1:
-            if total1 > 0:
-                st.error(f"{col1}: {total1} duplicados ({pct1:.2f}%)")
-                st.dataframe(dup1)
-            else:
-                st.success(f"{col1}: sin duplicados")
+            # MATCHING
+            st.markdown('<div class="section-header">🔗 Resultado del Matching</div>', unsafe_allow_html=True)
+            with st.spinner("Calculando matches..."):
+                progress = st.progress(0, text="Analizando...")
+                for i in range(0, 80, 20):
+                    time.sleep(0.1)
+                    progress.progress(i, text="Analizando...")
+                df_res = matching_ultra(tuple(base1), tuple(base2))
+                progress.progress(100, text="¡Listo!")
+                time.sleep(0.3)
+                progress.empty()
 
-        with c2:
-            if total2 > 0:
-                st.error(f"{col2}: {total2} duplicados ({pct2:.2f}%)")
-                st.dataframe(dup2)
-            else:
-                st.success(f"{col2}: sin duplicados")
+            st.dataframe(df_res, use_container_width=True, hide_index=True)
 
-        # ⚠️ SIMILARES
-        st.subheader("⚠️ Posibles errores humanos")
-        similares = duplicados_similares(base1)
+            # KPI
+            kpi = render_kpi(df_res, base1, base2, total_dup1, total_dup2)
 
-        if not similares.empty:
-            st.dataframe(similares)
-        else:
-            st.success("Sin errores similares")
-
-        # 🔗 MATCHING
-        st.subheader("🔗 Matching")
-
-        df_res = matching_ultra(base1, base2)
-
-        st.dataframe(df_res, use_container_width=True)
-
-        # 📊 KPI
-        st.subheader("📊 Score de Calidad")
-
-        kpi = calcular_calidad(df_res, len(base1), total1)
-
-        col1_, col2_, col3_, col4_ = st.columns(4)
-
-        col1_.metric("🟢 Match", f"{kpi['match']}%")
-        col2_.metric("🟡 Revisar", f"{kpi['revisar']}%")
-        col3_.metric("❌ No Match", f"{kpi['no_match']}%")
-        col4_.metric("🚨 Duplicados", f"{kpi['duplicados']}%")
-
-        st.markdown(f"## 🎯 Calidad de Base: **{kpi['score']} / 100**")
-
-        if kpi["score"] >= 80:
-            st.success("🟢 Base saludable")
-        elif kpi["score"] >= 60:
-            st.warning("🟡 Base con problemas")
-        else:
-            st.error("🔴 Base crítica")
-
-        # 📥 EXPORT
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_res.to_excel(writer, sheet_name="Matching", index=False)
-            dup1.to_excel(writer, sheet_name="Duplicados Col1", index=False)
-            dup2.to_excel(writer, sheet_name="Duplicados Col2", index=False)
-            similares.to_excel(writer, sheet_name="Similares", index=False)
-            pd.DataFrame([kpi]).to_excel(writer, sheet_name="KPI", index=False)
-
-        st.download_button("📥 Descargar Excel", output.getvalue(), "reporte_final.xlsx")
+            # EXPORT
+            st.markdown("---")
+            excel_bytes = exportar_excel(df_res, dup1_df, dup2_df, similares1, similares2, kpi)
+            st.download_button(
+                "📥 Descargar Reporte Completo (.xlsx)",
+                excel_bytes,
+                "reporte_matching_pro.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 # =========================
-# MULTI ARCHIVO
+# MODO: MULTI ARCHIVO
 # =========================
 if modo == "📂 Multi archivo":
 
-    archivos = st.file_uploader("Sube múltiples Excel", type=["xlsx"], accept_multiple_files=True)
+    archivos = st.file_uploader(
+        "📎 Sube múltiples archivos Excel",
+        type=["xlsx"],
+        accept_multiple_files=True
+    )
 
-    if archivos and len(archivos) >= 2:
+    if archivos:
+        if len(archivos) < 2:
+            st.warning("⚠️ Sube al menos 2 archivos para comparar.")
+            st.stop()
 
         nombres = [f.name for f in archivos]
-        maestro = st.selectbox("Archivo maestro", nombres)
+        maestro = st.selectbox("⭐ Archivo maestro (Base 1)", nombres)
 
         hojas = {}
         columnas = {}
 
+        st.markdown("**Configuración por archivo:**")
         for archivo in archivos:
-            excel = pd.ExcelFile(archivo)
-            hoja = st.selectbox(f"Hoja - {archivo.name}", excel.sheet_names)
+            with st.expander(f"📄 {archivo.name}", expanded=True):
+                excel = pd.ExcelFile(archivo)
+                hoja = st.selectbox(f"Hoja", excel.sheet_names, key=f"hoja_{archivo.name}")
+                df_temp = pd.read_excel(excel, sheet_name=hoja)
+                cols = df_temp.select_dtypes(include="object").columns.tolist()
+                col = st.selectbox(f"Columna a comparar", cols, key=f"col_{archivo.name}")
+                hojas[archivo.name] = hoja
+                columnas[archivo.name] = col
 
-            df_temp = pd.read_excel(excel, sheet_name=hoja)
-            cols = df_temp.select_dtypes(include="object").columns
+        if st.button("🚀 Ejecutar Matching Multi"):
+            archivo_maestro = next(f for f in archivos if f.name == maestro)
+            df_master = pd.read_excel(archivo_maestro, sheet_name=hojas[maestro])
+            base1 = limpiar_serie(df_master[columnas[maestro]])
 
-            col = st.selectbox(f"Columna - {archivo.name}", cols)
+            resultados = []
+            progress = st.progress(0, text="Procesando archivos...")
+            total = len([f for f in archivos if f.name != maestro])
 
-            hojas[archivo.name] = hoja
-            columnas[archivo.name] = col
+            for idx, archivo in enumerate([f for f in archivos if f.name != maestro]):
+                df = pd.read_excel(archivo, sheet_name=hojas[archivo.name])
+                base2 = limpiar_serie(df[columnas[archivo.name]])
 
-        archivo_maestro = next(f for f in archivos if f.name == maestro)
+                df_res = matching_ultra(tuple(base1), tuple(base2))
+                df_res["Archivo"] = archivo.name
+                resultados.append(df_res)
 
-        df_master = pd.read_excel(archivo_maestro, sheet_name=hojas[maestro])
-        base1 = df_master[columnas[maestro]].dropna().apply(limpiar_texto)
+                progress.progress(int((idx + 1) / total * 100), text=f"Procesado: {archivo.name}")
 
-        resultados = []
+            progress.empty()
+            df_final = pd.concat(resultados, ignore_index=True)
 
-        for archivo in archivos:
-            if archivo.name == maestro:
-                continue
+            st.markdown('<div class="section-header">🔗 Resultado del Matching Global</div>', unsafe_allow_html=True)
+            st.dataframe(df_final, use_container_width=True, hide_index=True)
 
-            df = pd.read_excel(archivo, sheet_name=hojas[archivo.name])
-            base2 = df[columnas[archivo.name]].dropna().apply(limpiar_texto)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_final.to_excel(writer, index=False, sheet_name="Matching Global")
 
-            df_res = matching_ultra(base1, base2)
-            df_res["Archivo"] = archivo.name
+            st.download_button(
+                "📥 Descargar Resultado (.xlsx)",
+                output.getvalue(),
+                "matching_multi.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-            resultados.append(df_res)
-
-        df_final = pd.concat(resultados)
-
-        st.dataframe(df_final, use_container_width=True)
-
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_final.to_excel(writer, index=False)
-
-        st.download_button("📥 Descargar Excel", output.getvalue(), "matching_multi.xlsx")
+# -------------------------
+# FOOTER
+# -------------------------
+st.markdown("""
+<div style='text-align:center; color:#475569; margin-top:4rem; font-size:0.8rem; padding-bottom:2rem;'>
+    Matching PRO MAX · Powered by RapidFuzz + Streamlit · v2.0
+</div>
+""", unsafe_allow_html=True)
